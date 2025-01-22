@@ -1,0 +1,52 @@
+from picamera import PiCamera
+import telegram
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import socket
+
+# إعداد الكاميرا
+camera = PiCamera()
+
+# إعداد Telegram Bot
+BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'  # ضع رمز البوت هنا
+CHAT_ID = 'YOUR_CHAT_ID'  # ضع رقم تعريف المستخدم هنا
+bot = telegram.Bot(token=BOT_TOKEN)
+
+# إعداد الاتصال مع EV3
+EV3_IP = '192.168.1.100'  # عنوان IP الخاص بـ EV3
+EV3_PORT = 12345  # المنفذ الذي يعمل عليه EV3
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client_socket.connect((EV3_IP, EV3_PORT))
+
+# دالة التقاط الصورة وإرسالها
+def capture_and_send_image():
+    image_path = '/home/pi/water_image.jpg'
+    camera.capture(image_path)
+    bot.send_photo(chat_id=CHAT_ID, photo=open(image_path, 'rb'))
+
+# أوامر Telegram
+def start(update, context):
+    update.message.reply_text("مرحبًا! الروبوت جاهز للعمل.")
+
+def send_image(update, context):
+    capture_and_send_image()
+    update.message.reply_text("تم إرسال الصورة. أرسل 'حركة' أو 'تنظيف'.")
+
+def handle_command(update, context):
+    command = update.message.text.lower()
+    if command in ["حركة", "تنظيف"]:
+        client_socket.send(command.encode())  # إرسال الأمر إلى EV3
+        update.message.reply_text(f"تم إرسال الأمر '{command}' إلى الروبوت.")
+    else:
+        update.message.reply_text("أمر غير معروف! حاول إرسال 'حركة' أو 'تنظيف'.")
+
+# إعداد Telegram Bot Handlers
+updater = Updater(BOT_TOKEN, use_context=True)
+dp = updater.dispatcher
+
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("صورة", send_image))
+dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_command))
+
+# تشغيل البوت
+updater.start_polling()
+updater.idle()
