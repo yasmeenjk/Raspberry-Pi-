@@ -1,0 +1,47 @@
+import cv2
+from picamera import PiCamera
+from telegram import Bot
+
+# إعداد التليجرام
+TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"  # ضع التوكن الخاص بك هنا
+CHAT_ID = "YOUR_CHAT_ID"  # ضع معرف الدردشة الخاص بك هنا
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
+
+# إعداد الكاميرا
+camera = PiCamera()
+camera.resolution = (640, 480)
+
+# وظيفة التقاط الصور وتحليلها
+def capture_and_process_image():
+    camera.capture('/home/pi/water_image.jpg')  # التقاط صورة
+    img = cv2.imread('/home/pi/water_image.jpg')  # قراءة الصورة
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # تحويل الصورة إلى تدرج رمادي
+    _, threshold = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)  # استخراج العناصر البارزة
+    dirt_detected = cv2.countNonZero(threshold) > 50000  # التحقق من كمية الشوائب
+    return dirt_detected, '/home/pi/water_image.jpg'
+
+# وظيفة إرسال الصور للتليجرام
+def send_image_to_telegram(image_path, message):
+    bot.send_message(chat_id=CHAT_ID, text=message)
+    bot.send_photo(chat_id=CHAT_ID, photo=open(image_path, 'rb'))
+
+# وظيفة إرسال أوامر إلى EV3
+def send_command_to_ev3(command):
+    with open('/home/pi/command.txt', 'w') as file:
+        file.write(command)
+
+# الوظيفة الرئيسية
+def main():
+    while True:
+        dirt_detected, image_path = capture_and_process_image()
+        if dirt_detected:
+            send_image_to_telegram(image_path, "شوائب كبيرة تم الكشف عنها. سيتم التنظيف.")
+            send_command_to_ev3("CLEAN")  # إرسال أمر التنظيف إلى EV3
+        else:
+            send_image_to_telegram(image_path, "لا توجد شوائب كبيرة. النظام في وضع المراقبة.")
+            send_command_to_ev3("STANDBY")  # إرسال أمر الاستعداد إلى EV3
+
+        time.sleep(10)  # فاصل زمني بين عمليات الفحص
+
+if __name__ == "__main__":
+    main()
